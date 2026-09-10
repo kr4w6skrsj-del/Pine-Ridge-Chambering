@@ -165,7 +165,9 @@ main{flex:1;display:flex;flex-direction:column}
 .stageCanvas {
   position:absolute;inset:0;
   display:flex;align-items:center;justify-content:center;
-  padding:28px 24px 34px;
+  padding:18px 18px 22px;
+  overflow:auto;
+  -webkit-overflow-scrolling:touch;
 }
 .worksheet {
   position:relative;
@@ -191,7 +193,7 @@ main{flex:1;display:flex;flex-direction:column}
   padding:0 2px 2px;
   line-height:1.05;
   outline:none;
-  font-size:clamp(12px,1.15vw,24px);
+  font-size:clamp(11px,1.0vw,22px);
 }
 .overlay::placeholder{color:#d7a49f;opacity:.9}
 .overlay:focus {
@@ -277,6 +279,9 @@ textarea.overlay:focus{border-color:var(--focus);border-bottom-color:var(--focus
 .viewerFull .stageWrap{padding:0}
 .viewerFull .stage{width:100%;min-height:100dvh;border-radius:0;border:0;box-shadow:none}
 .viewerFull .stageCanvas{padding:18px}
+.viewerFull #quickEditor{display:none!important}
+.exitPresentBtn{position:fixed;top:calc(14px + var(--safeTop));right:calc(14px + var(--safeRight));z-index:95;display:none}
+.viewerFull .exitPresentBtn{display:inline-flex}
 
 @media (max-width: 980px) {
   .heroCard{grid-template-columns:1fr}
@@ -342,7 +347,7 @@ textarea.overlay:focus{border-color:var(--focus);border-bottom-color:var(--focus
         <button class="primaryBtn" id="newBtn">New Chamber</button>
       </div>
       <div class="topActions isHidden" id="viewerActionsTop">
-        <button class="ghostBtn" id="presentBtn">TV View</button>
+        <button class="ghostBtn" id="presentBtn">Fullscreen</button>
         <button class="plainBtn" id="detailsBtnTop">Details</button>
       </div>
     </div>
@@ -355,7 +360,7 @@ textarea.overlay:focus{border-color:var(--focus);border-bottom-color:var(--focus
           <div>
             <p class="heroEyebrow">Workspace</p>
             <h1 class="heroTitle">Chambers</h1>
-            <p class="heroText">Tap a saved chamber to open the worksheet straight into full-screen shop view. Use New Chamber to start from a blank sheet.</p>
+            <p class="heroText">Tap a saved chamber to open the worksheet straight into fullscreen mode. Use New Chamber to start from a blank sheet.</p>
           </div>
           <button class="blankCard" id="blankCard">
             <div style="display:flex;align-items:center;gap:14px;">
@@ -461,6 +466,8 @@ textarea.overlay:focus{border-color:var(--focus);border-bottom-color:var(--focus
     </div>
   </aside>
 
+  <button class="plainBtn exitPresentBtn" id="exitPresentBtn">Exit Fullscreen</button>
+
   <div class="quickEditor" id="quickEditor" aria-hidden="true">
     <div class="quickMeta">
       <b id="quickLabel">Measurement</b>
@@ -495,6 +502,7 @@ window.CHAMBER_FIELDS = [{"id": "top_hs_nominal", "label": "Top HS", "left": 15.
   const now = () => new Date().toISOString();
   const makeId = () => "ch_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,7);
   const today = () => new Date().toLocaleDateString("en-US", {month:"2-digit",day:"2-digit",year:"numeric"});
+  const isPhone = () => window.innerWidth <= 720;
   const fmtShort = iso => new Date(iso).toLocaleDateString([], {month:"short",day:"numeric",year:"numeric"});
   const fmtLong = iso => new Date(iso).toLocaleString([], {month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"});
   const escapeHtml = s => String(s ?? "").replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m]));
@@ -576,7 +584,7 @@ window.CHAMBER_FIELDS = [{"id": "top_hs_nominal", "label": "Top HS", "left": 15.
           </div>
         </div>
         <div class="cardArrow">›</div>`;
-      btn.addEventListener("click", () => openViewer(r.id));
+      btn.addEventListener("click", () => { openViewer(r.id); togglePresent(true); });
       list.appendChild(btn);
     });
   }
@@ -603,7 +611,7 @@ window.CHAMBER_FIELDS = [{"id": "top_hs_nominal", "label": "Top HS", "left": 15.
       } else {
         el.placeholder = "";
       }
-      el.addEventListener("focus", () => openQuick(f.id));
+      el.addEventListener("focus", () => { activeFieldId = f.id; if (!isPhone()) openQuick(f.id); });
       el.addEventListener("input", () => updateValue(f.id, el.value, true));
       wrap.appendChild(el);
     });
@@ -740,6 +748,7 @@ window.CHAMBER_FIELDS = [{"id": "top_hs_nominal", "label": "Top HS", "left": 15.
   }
 
   function openQuick(fieldId) {
+    if (isPhone()) return;
     activeFieldId = fieldId;
     const field = window.CHAMBER_FIELDS.find(x => x.id === fieldId);
     const r = active();
@@ -757,7 +766,7 @@ window.CHAMBER_FIELDS = [{"id": "top_hs_nominal", "label": "Top HS", "left": 15.
     $("#quickEditor").setAttribute("aria-hidden", "true");
   }
   function moveQuick(delta) {
-    if (!activeFieldId) return;
+    if (isPhone() || !activeFieldId) return;
     const idx = window.CHAMBER_FIELDS.findIndex(f => f.id === activeFieldId);
     const next = (idx + delta + window.CHAMBER_FIELDS.length) % window.CHAMBER_FIELDS.length;
     const field = window.CHAMBER_FIELDS[next];
@@ -779,14 +788,15 @@ window.CHAMBER_FIELDS = [{"id": "top_hs_nominal", "label": "Top HS", "left": 15.
     $("#detailsDrawer").classList.remove("open");
     $("#scrim").classList.remove("open");
   }
-  function togglePresent() {
-    presentMode = !presentMode;
+  function togglePresent(force) {
+    presentMode = typeof force === "boolean" ? force : !presentMode;
     document.body.classList.toggle("viewerFull", presentMode);
-    $("#presentBtn").textContent = presentMode ? "Exit TV View" : "TV View";
+    $("#presentBtn").textContent = presentMode ? "Exit Fullscreen" : "Fullscreen";
+    if (presentMode) { closeQuick(); closeDrawer(); }
   }
 
   function backupData() {
-    const blob = new Blob([JSON.stringify({app:"Pine Ridge Chamber", version:"0.3", exportedAt:now(), records}, null, 2)], {type:"application/json"});
+    const blob = new Blob([JSON.stringify({app:"Pine Ridge Chamber", version:"0.4", exportedAt:now(), records}, null, 2)], {type:"application/json"});
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "PineRidgeChambersBackup-" + new Date().toISOString().slice(0,10) + ".json";
@@ -836,8 +846,9 @@ window.CHAMBER_FIELDS = [{"id": "top_hs_nominal", "label": "Top HS", "left": 15.
     $("#drawerDuplicate").onclick = duplicateRecord;
     $("#drawerBackup").onclick = backupData;
     $("#drawerImport").onclick = () => $("#importFile").click();
-    $("#scrim").onclick = () => { closeDrawer(); closeQuick(); };
-    $("#presentBtn").onclick = togglePresent;
+    $("#scrim").onclick = () => { closeDrawer(); if (!isPhone()) closeQuick(); };
+    $("#presentBtn").onclick = () => togglePresent();
+    $("#exitPresentBtn").onclick = () => togglePresent(false);
 
     $("#duplicateBtn").onclick = duplicateRecord;
     $("#deleteBtn").onclick = deleteRecord;
@@ -857,6 +868,8 @@ window.CHAMBER_FIELDS = [{"id": "top_hs_nominal", "label": "Top HS", "left": 15.
       if (file) importData(file);
       e.target.value = "";
     });
+
+    window.addEventListener("resize", () => { if (isPhone()) closeQuick(); });
   });
 })();
 </script>
